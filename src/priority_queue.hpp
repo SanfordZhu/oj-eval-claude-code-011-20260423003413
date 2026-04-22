@@ -61,7 +61,7 @@ private:
         return a;
     }
 
-    Node *mergePersistent(Node *a, Node *b) {
+    Node *mergeCopy(Node *a, Node *b) {
         if (!a) return copyNode(b);
         if (!b) return copyNode(a);
 
@@ -70,7 +70,7 @@ private:
             newNode = new Node(b->data);
             newNode->left = copyNode(b->left);
             try {
-                newNode->right = mergePersistent(a, b->right);
+                newNode->right = mergeCopy(a, b->right);
             } catch (...) {
                 clear(newNode->left);
                 delete newNode;
@@ -80,7 +80,7 @@ private:
             newNode = new Node(a->data);
             newNode->left = copyNode(a->left);
             try {
-                newNode->right = mergePersistent(a->right, b);
+                newNode->right = mergeCopy(a->right, b);
             } catch (...) {
                 clear(newNode->left);
                 delete newNode;
@@ -122,31 +122,17 @@ public:
 
     void push(const T &e) {
         Node *newNode = new Node(e);
-
-        try {
-            root = merge(root, newNode);
-            sz++;
-        } catch (...) {
-            delete newNode;
-            throw runtime_error();
-        }
+        root = merge(root, newNode);
+        sz++;
     }
 
     void pop() {
         if (empty()) throw container_is_empty();
 
-        Node *left = root->left;
-        Node *right = root->right;
-        Node *oldRoot = root;
-
-        try {
-            root = merge(left, right);
-            sz--;
-            delete oldRoot;
-        } catch (...) {
-            root = oldRoot;
-            throw runtime_error();
-        }
+        Node *newRoot = merge(root->left, root->right);
+        delete root;
+        root = newRoot;
+        sz--;
     }
 
     size_t size() const {
@@ -160,16 +146,15 @@ public:
     void merge(priority_queue &other) {
         if (this == &other) return;
 
-        Node *newRoot = mergePersistent(root, other.root);
+        Node *newRoot = mergeCopy(root, other.root);
         size_t newSz = sz + other.sz;
 
-        clear(other.root);
-        other.root = nullptr;
-        other.sz = 0;
-
         clear(root);
+        clear(other.root);
         root = newRoot;
         sz = newSz;
+        other.root = nullptr;
+        other.sz = 0;
     }
 };
 
