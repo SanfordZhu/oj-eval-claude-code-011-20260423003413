@@ -51,14 +51,41 @@ private:
             std::swap(a, b);
         }
 
-        Node *newNode = new Node(a->data);
-        newNode->left = a->left;
+        a->right = merge(a->right, b);
 
-        try {
-            newNode->right = merge(a->right, b);
-        } catch (...) {
-            delete newNode;
-            throw;
+        if (getNpl(a->left) < getNpl(a->right)) {
+            std::swap(a->left, a->right);
+        }
+
+        a->npl = getNpl(a->right) + 1;
+        return a;
+    }
+
+    Node *mergePersistent(Node *a, Node *b) {
+        if (!a) return copyNode(b);
+        if (!b) return copyNode(a);
+
+        Node *newNode;
+        if (cmp(a->data, b->data)) {
+            newNode = new Node(b->data);
+            newNode->left = copyNode(b->left);
+            try {
+                newNode->right = mergePersistent(a, b->right);
+            } catch (...) {
+                clear(newNode->left);
+                delete newNode;
+                throw;
+            }
+        } else {
+            newNode = new Node(a->data);
+            newNode->left = copyNode(a->left);
+            try {
+                newNode->right = mergePersistent(a->right, b);
+            } catch (...) {
+                clear(newNode->left);
+                delete newNode;
+                throw;
+            }
         }
 
         if (getNpl(newNode->left) < getNpl(newNode->right)) {
@@ -108,10 +135,12 @@ public:
     void pop() {
         if (empty()) throw container_is_empty();
 
+        Node *left = root->left;
+        Node *right = root->right;
         Node *oldRoot = root;
 
         try {
-            root = merge(root->left, root->right);
+            root = merge(left, right);
             sz--;
             delete oldRoot;
         } catch (...) {
@@ -131,23 +160,16 @@ public:
     void merge(priority_queue &other) {
         if (this == &other) return;
 
-        Node *oldRoot1 = root;
-        Node *oldRoot2 = other.root;
-        size_t oldSz1 = sz;
-        size_t oldSz2 = other.sz;
+        Node *newRoot = mergePersistent(root, other.root);
+        size_t newSz = sz + other.sz;
 
-        try {
-            root = merge(root, other.root);
-            sz += other.sz;
-            other.root = nullptr;
-            other.sz = 0;
-        } catch (...) {
-            root = oldRoot1;
-            other.root = oldRoot2;
-            sz = oldSz1;
-            other.sz = oldSz2;
-            throw runtime_error();
-        }
+        clear(other.root);
+        other.root = nullptr;
+        other.sz = 0;
+
+        clear(root);
+        root = newRoot;
+        sz = newSz;
     }
 };
 
