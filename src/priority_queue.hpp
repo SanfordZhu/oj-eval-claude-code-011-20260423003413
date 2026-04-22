@@ -6,75 +6,149 @@
 #include "exceptions.hpp"
 
 namespace sjtu {
-/**
- * @brief a container like std::priority_queue which is a heap internal.
- * **Exception Safety**: The `Compare` operation might throw exceptions for certain data.
- * In such cases, any ongoing operation should be terminated, and the priority queue should be restored to its original state before the operation began.
- */
+
 template<typename T, class Compare = std::less<T>>
 class priority_queue {
+private:
+    struct Node {
+        T data;
+        Node *left;
+        Node *right;
+        int npl;
+
+        Node(const T &val) : data(val), left(nullptr), right(nullptr), npl(0) {}
+    };
+
+    Node *root;
+    Compare cmp;
+    size_t sz;
+
+    int getNpl(Node *node) const {
+        return node ? node->npl : -1;
+    }
+
+    Node *copyNode(Node *node) {
+        if (!node) return nullptr;
+        Node *newNode = new Node(node->data);
+        newNode->left = copyNode(node->left);
+        newNode->right = copyNode(node->right);
+        newNode->npl = node->npl;
+        return newNode;
+    }
+
+    void clear(Node *node) {
+        if (!node) return;
+        clear(node->left);
+        clear(node->right);
+        delete node;
+    }
+
+    Node *merge(Node *a, Node *b) {
+        if (!a) return b;
+        if (!b) return a;
+
+        if (cmp(a->data, b->data)) {
+            std::swap(a, b);
+        }
+
+        Node *newNode = new Node(a->data);
+        newNode->left = a->left;
+
+        try {
+            newNode->right = merge(a->right, b);
+        } catch (...) {
+            delete newNode;
+            throw;
+        }
+
+        if (getNpl(newNode->left) < getNpl(newNode->right)) {
+            std::swap(newNode->left, newNode->right);
+        }
+
+        newNode->npl = getNpl(newNode->right) + 1;
+        return newNode;
+    }
+
 public:
-	/**
-	 * @brief default constructor
-	 */
-	priority_queue() {}
+    priority_queue() : root(nullptr), sz(0) {}
 
-	/**
-	 * @brief copy constructor
-	 * @param other the priority_queue to be copied
-	 */
-	priority_queue(const priority_queue &other) {}
+    priority_queue(const priority_queue &other) : root(copyNode(other.root)), sz(other.sz) {}
 
-	/**
-	 * @brief deconstructor
-	 */
-	~priority_queue() {}
+    ~priority_queue() {
+        clear(root);
+    }
 
-	/**
-	 * @brief Assignment operator
-	 * @param other the priority_queue to be assigned from
-	 * @return a reference to this priority_queue after assignment
-	 */
-	priority_queue &operator=(const priority_queue &other) {}
+    priority_queue &operator=(const priority_queue &other) {
+        if (this == &other) return *this;
 
-	/**
-	 * @brief get the top element of the priority queue.
-	 * @return a reference of the top element.
-	 * @throws container_is_empty if empty() returns true
-	 */
-	const T & top() const {}
+        Node *newRoot = copyNode(other.root);
+        clear(root);
+        root = newRoot;
+        sz = other.sz;
+        return *this;
+    }
 
-	/**
-	 * @brief push new element to the priority queue.
-	 * @param e the element to be pushed
-	 */
-	void push(const T &e) {}
+    const T &top() const {
+        if (empty()) throw container_is_empty();
+        return root->data;
+    }
 
-	/**
-	 * @brief delete the top element from the priority queue.
-	 * @throws container_is_empty if empty() returns true
-	 */
-	void pop() {}
+    void push(const T &e) {
+        Node *newNode = new Node(e);
 
-	/**
-	 * @brief return the number of elements in the priority queue.
-	 * @return the number of elements.
-	 */
-	size_t size() const {}
+        try {
+            root = merge(root, newNode);
+            sz++;
+        } catch (...) {
+            delete newNode;
+            throw runtime_error();
+        }
+    }
 
-	/**
-	 * @brief check if the container is empty.
-	 * @return true if it is empty, false otherwise.
-	 */
-	bool empty() const {}
+    void pop() {
+        if (empty()) throw container_is_empty();
 
-	/**
-	 * @brief merge another priority_queue into this one.
-	 * The other priority_queue will be cleared after merging.
-	 * The complexity is at most O(logn).
-	 * @param other the priority_queue to be merged.
-	 */
-	void merge(priority_queue &other) {}
+        Node *oldRoot = root;
+
+        try {
+            root = merge(root->left, root->right);
+            sz--;
+            delete oldRoot;
+        } catch (...) {
+            root = oldRoot;
+            throw runtime_error();
+        }
+    }
+
+    size_t size() const {
+        return sz;
+    }
+
+    bool empty() const {
+        return sz == 0;
+    }
+
+    void merge(priority_queue &other) {
+        if (this == &other) return;
+
+        Node *oldRoot1 = root;
+        Node *oldRoot2 = other.root;
+        size_t oldSz1 = sz;
+        size_t oldSz2 = other.sz;
+
+        try {
+            root = merge(root, other.root);
+            sz += other.sz;
+            other.root = nullptr;
+            other.sz = 0;
+        } catch (...) {
+            root = oldRoot1;
+            other.root = oldRoot2;
+            sz = oldSz1;
+            other.sz = oldSz2;
+            throw runtime_error();
+        }
+    }
 };
 
 }
