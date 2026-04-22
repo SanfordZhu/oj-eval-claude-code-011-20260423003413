@@ -15,8 +15,9 @@ private:
         Node *left;
         Node *right;
         int npl;
+        int refCount;
 
-        Node(const T &val) : data(val), left(nullptr), right(nullptr), npl(0) {}
+        Node(const T &val) : data(val), left(nullptr), right(nullptr), npl(0), refCount(1) {}
     };
 
     Node *root;
@@ -25,6 +26,20 @@ private:
 
     int getNpl(Node *node) const {
         return node ? node->npl : -1;
+    }
+
+    void retain(Node *node) {
+        if (node) node->refCount++;
+    }
+
+    void release(Node *node) {
+        if (!node) return;
+        node->refCount--;
+        if (node->refCount == 0) {
+            release(node->left);
+            release(node->right);
+            delete node;
+        }
     }
 
     Node *copyNode(Node *node) {
@@ -51,41 +66,16 @@ private:
             std::swap(a, b);
         }
 
-        a->right = merge(a->right, b);
+        Node *newNode = new Node(a->data);
+        newNode->left = a->left;
+        retain(newNode->left);
 
-        if (getNpl(a->left) < getNpl(a->right)) {
-            std::swap(a->left, a->right);
-        }
-
-        a->npl = getNpl(a->right) + 1;
-        return a;
-    }
-
-    Node *mergeCopy(Node *a, Node *b) {
-        if (!a) return copyNode(b);
-        if (!b) return copyNode(a);
-
-        Node *newNode;
-        if (cmp(a->data, b->data)) {
-            newNode = new Node(b->data);
-            newNode->left = copyNode(b->left);
-            try {
-                newNode->right = mergeCopy(a, b->right);
-            } catch (...) {
-                clear(newNode->left);
-                delete newNode;
-                throw;
-            }
-        } else {
-            newNode = new Node(a->data);
-            newNode->left = copyNode(a->left);
-            try {
-                newNode->right = mergeCopy(a->right, b);
-            } catch (...) {
-                clear(newNode->left);
-                delete newNode;
-                throw;
-            }
+        try {
+            newNode->right = merge(a->right, b);
+        } catch (...) {
+            release(newNode->left);
+            delete newNode;
+            throw;
         }
 
         if (getNpl(newNode->left) < getNpl(newNode->right)) {
@@ -93,6 +83,10 @@ private:
         }
 
         newNode->npl = getNpl(newNode->right) + 1;
+
+        a->left = nullptr;
+        a->right = nullptr;
+        release(a);
         return newNode;
     }
 
@@ -129,10 +123,18 @@ public:
     void pop() {
         if (empty()) throw container_is_empty();
 
-        Node *newRoot = merge(root->left, root->right);
-        delete root;
-        root = newRoot;
-        sz--;
+        Node *left = root->left;
+        Node *right = root->right;
+        Node *oldRoot = root;
+
+        try {
+            root = merge(left, right);
+            sz--;
+            delete oldRoot;
+        } catch (...) {
+            root = oldRoot;
+            throw runtime_error();
+        }
     }
 
     size_t size() const {
@@ -146,15 +148,23 @@ public:
     void merge(priority_queue &other) {
         if (this == &other) return;
 
-        Node *newRoot = mergeCopy(root, other.root);
-        size_t newSz = sz + other.sz;
+        Node *oldRoot1 = root;
+        Node *oldRoot2 = other.root;
+        size_t oldSz1 = sz;
+        size_t oldSz2 = other.sz;
 
-        clear(root);
-        clear(other.root);
-        root = newRoot;
-        sz = newSz;
-        other.root = nullptr;
-        other.sz = 0;
+        try {
+            root = merge(root, other.root);
+            sz += other.sz;
+            other.root = nullptr;
+            other.sz = 0;
+        } catch (...) {
+            root = oldRoot1;
+            other.root = oldRoot2;
+            sz = oldSz1;
+            other.sz = oldSz2;
+            throw runtime_error();
+        }
     }
 };
 
